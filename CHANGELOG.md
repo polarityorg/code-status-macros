@@ -14,6 +14,7 @@
   - Two-phase file processing: first collect eligible files, then analyze them
   - More efficient filtering of files before content analysis
 - Enhanced CLI help documentation with better descriptions of commands and options
+- Updated all repository references from "flashnet-dev-utils" to "code-status-macros" to match the new repository name
 
 ### Fixed
 - Fixed potential performance bottleneck when scanning workspace projects with many files
