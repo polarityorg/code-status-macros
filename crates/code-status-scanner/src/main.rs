@@ -39,6 +39,17 @@ const MACRO_NAMES: &[&str] = &[
     "benchmark_candidate",
 ];
 
+/// Common directories to exclude for better performance
+const DEFAULT_EXCLUDE_DIRS: &[&str] = &[
+    "target/",
+    "node_modules/",
+    ".git/",
+    ".idea/",
+    ".vscode/",
+    "dist/",
+    "build/",
+];
+
 /// CLI arguments
 #[derive(Parser)]
 #[command(name = "code-status-scanner")]
@@ -55,6 +66,14 @@ struct Cli {
     /// Exclude files matching this pattern (regex)
     #[arg(short, long)]
     exclude: Option<String>,
+
+    /// Maximum directory depth to scan (default: no limit)
+    #[arg(short, long)]
+    max_depth: Option<usize>,
+
+    /// Skip default excluded directories (target/, node_modules/, etc.)
+    #[arg(short = 'S', long, default_value_t = true)]
+    skip_default_dirs: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -84,6 +103,20 @@ struct MacroInstance {
     context: String,
 }
 
+/// Pre-compile all regexes for better performance
+fn create_macro_regexes() -> Vec<(String, Regex)> {
+    MACRO_NAMES
+        .iter()
+        .map(|&name| {
+            let pattern = format!("#\\[{}(.*?)\\]", name);
+            (
+                name.to_string(),
+                Regex::new(&pattern).expect("Failed to compile regex pattern"),
+            )
+        })
+        .collect()
+}
+
 fn main() {
     let cli = Cli::parse();
     let path = Path::new(&cli.path);
@@ -96,8 +129,18 @@ fn main() {
         .exclude
         .map(|p| Regex::new(&p).expect("Invalid exclude pattern"));
 
+    // Pre-compile all the regexes we'll need
+    let macro_regexes = create_macro_regexes();
+
     // Find all macros in the codebase
-    let instances = scan_directory(path, &include_pattern, &exclude_pattern);
+    let instances = scan_directory(
+        path,
+        &include_pattern,
+        &exclude_pattern,
+        &macro_regexes,
+        cli.max_depth,
+        cli.skip_default_dirs,
+    );
 
     if instances.is_empty() {
         println!(
@@ -120,43 +163,69 @@ fn scan_directory(
     path: &Path,
     include_pattern: &Option<Regex>,
     exclude_pattern: &Option<Regex>,
+    macro_regexes: &[(String, Regex)],
+    max_depth: Option<usize>,
+    skip_default_dirs: bool,
 ) -> Vec<MacroInstance> {
     let mut instances = Vec::new();
+    let max_depth = max_depth.unwrap_or(usize::MAX);
 
-    for entry in WalkDir::new(path)
+    // First collect all eligible files to avoid recursive regex checks
+    let walker = WalkDir::new(path)
         .follow_links(true)
+        .max_depth(max_depth)
         .into_iter()
-        .filter_map(Result::ok)
-    {
-        let path = entry.path();
+        .filter_map(Result::ok);
 
-        // Skip if not a file
-        if !path.is_file() {
-            continue;
-        }
+    let files: Vec<PathBuf> = walker
+        .filter(|entry| {
+            let path = entry.path();
 
-        // Skip if not a Rust file
-        if !path.to_string_lossy().ends_with(".rs") {
-            continue;
-        }
-
-        // Apply include/exclude patterns
-        let path_str = path.to_string_lossy();
-        if let Some(pattern) = include_pattern {
-            if !pattern.is_match(&path_str) {
-                continue;
+            // Skip if not a file
+            if !path.is_file() {
+                return false;
             }
-        }
 
-        if let Some(pattern) = exclude_pattern {
-            if pattern.is_match(&path_str) {
-                continue;
+            // Skip if not a Rust file
+            if !path.to_string_lossy().ends_with(".rs") {
+                return false;
             }
-        }
 
-        // Read the file
+            // Skip default excluded directories if enabled
+            if skip_default_dirs {
+                let path_str = path.to_string_lossy();
+                if DEFAULT_EXCLUDE_DIRS
+                    .iter()
+                    .any(|&dir| path_str.contains(dir))
+                {
+                    return false;
+                }
+            }
+
+            // Apply include/exclude patterns
+            let path_str = path.to_string_lossy();
+            if let Some(pattern) = include_pattern {
+                if !pattern.is_match(&path_str) {
+                    return false;
+                }
+            }
+
+            if let Some(pattern) = exclude_pattern {
+                if pattern.is_match(&path_str) {
+                    return false;
+                }
+            }
+
+            true
+        })
+        .map(|entry| entry.path().to_path_buf())
+        .collect();
+
+    // Process each file
+    for path in &files {
         if let Ok(content) = fs::read_to_string(path) {
-            instances.append(&mut scan_file(path, &content));
+            let mut file_instances = scan_file(path, &content, macro_regexes);
+            instances.append(&mut file_instances);
         }
     }
 
@@ -164,33 +233,30 @@ fn scan_directory(
 }
 
 /// Scan a single file for code status macros
-fn scan_file(path: &Path, content: &str) -> Vec<MacroInstance> {
+fn scan_file(path: &Path, content: &str, macro_regexes: &[(String, Regex)]) -> Vec<MacroInstance> {
     let mut instances = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
 
     for (line_idx, line) in lines.iter().enumerate() {
-        // Check for any of our macros
-        for &macro_name in MACRO_NAMES {
-            let attr_pattern = format!("#\\[{}(.*?)\\]", macro_name);
-            if let Ok(re) = Regex::new(&attr_pattern) {
-                if let Some(caps) = re.captures(line) {
-                    let argument = caps.get(1).map(|m| m.as_str().trim().to_string());
+        // Check for macros in the current line
+        for (macro_name, regex) in macro_regexes {
+            if let Some(caps) = regex.captures(line) {
+                let argument = caps.get(1).map(|m| m.as_str().trim().to_string());
 
-                    // Get context (next line after the macro)
-                    let context = if line_idx + 1 < lines.len() {
-                        lines[line_idx + 1].trim().to_string()
-                    } else {
-                        "".to_string()
-                    };
+                // Get context (next line after the macro)
+                let context = if line_idx + 1 < lines.len() {
+                    lines[line_idx + 1].trim().to_string()
+                } else {
+                    String::new()
+                };
 
-                    instances.push(MacroInstance {
-                        path: path.to_path_buf(),
-                        line: line_idx + 1,
-                        macro_name: macro_name.to_string(),
-                        argument,
-                        context,
-                    });
-                }
+                instances.push(MacroInstance {
+                    path: path.to_path_buf(),
+                    line: line_idx + 1,
+                    macro_name: macro_name.clone(),
+                    argument,
+                    context,
+                });
             }
         }
     }

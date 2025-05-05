@@ -32,6 +32,7 @@ deny-warnings = true
 
 [workspace.dependencies]
 code-status-macros = { version = "0.1.0", path = "crates/code-status-macros" }
+code-status-scanner = { version = "0.1.1", path = "crates/code-status-scanner" }
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"
 proc-macro2 = "1.0"
