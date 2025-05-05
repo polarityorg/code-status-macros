@@ -1,0 +1,24 @@
+[package]
+name = "code-status-scanner"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool to scan codebases for code-status-macros usage"
+license.workspace = true
+authors = ["Flashnet <hello@flashnet.xyz>"]
+repository.workspace = true
+
+[dependencies]
+code-status-macros = { workspace = true }
+syn = { workspace = true }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+clap = { workspace = true }
+walkdir = { workspace = true }
+colored = { workspace = true }
+regex = { workspace = true }
+
+[dev-dependencies]
+code-status-macros = { workspace = true }
+
+[lints]
+workspace = true

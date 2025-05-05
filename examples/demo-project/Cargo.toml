@@ -1,0 +1,14 @@
+[package]
+name = "code-status-demo"
+version = "0.1.0"
+edition = "2021"
+description = "Example project demonstrating code-status-macros"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+code-status-macros = { version = "0.1.0", path = "../../crates/code-status-macros" }
+
+[features]
+advanced-features = []

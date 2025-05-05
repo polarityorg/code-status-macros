@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/code-status-macros",
+    "crates/code-status-scanner",
+    "examples/demo-project",
+]
+
+rust-version = "1.60.0"
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+rust-version = "1.60.0"
+repository = "https://github.com/polarityorg/code-status-macros"
+
+# Workspace-wide clippy lints configuration
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+restriction = "warn"
+
+# You can also add rustc lints if desired
+[workspace.lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[workspace.metadata.clippy]
+warn-on-all-levels = true
+deny-warnings = true
+
+[workspace.dependencies]
+code-status-macros = { version = "0.1.0", path = "crates/code-status-macros" }
+syn = { version = "2.0", features = ["full", "visit"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+# Binary tool dependencies
+clap = { version = "4.4", features = ["derive"] }
+walkdir = "2.4"
+colored = "2.0"
+regex = "1.9"
