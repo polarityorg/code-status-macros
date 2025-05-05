@@ -9,8 +9,8 @@ A command-line tool to scan Rust codebases for [code-status-macros](../code-stat
 cargo install code-status-scanner
 
 # Or build from source
-git clone https://github.com/polarityorg/flashnet-public-dev-utils.git
-cd flashnet-public-dev-utils
+git clone https://github.com/polarityorg/code-status-macros.git
+cd code-status-macros
 cargo install --path crates/code-status-scanner
 ```
 
@@ -103,6 +103,6 @@ Top 5 files by macro usage:
 
 ## Development
 
-This tool is part of the [flashnet-public-dev-utils](https://github.com/polarityorg/flashnet-public-dev-utils) collection of development utilities.
+This tool is part of the [code-status-macros](https://github.com/polarityorg/code-status-macros) collection of development utilities.
 
 To contribute or report issues, please visit the GitHub repository. 
